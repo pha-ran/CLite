@@ -29,12 +29,16 @@ class Program {
         return tm;
     }
 
-    public void V() {
+    public void V(TypeMap tm) {
         decpart.V();
-        TypeMap tm = typing(decpart);
         System.out.println("[ Type Map ]");
         tm.display();
         body.V(tm);
+    }
+
+    public Program T(TypeMap tm) {
+        body = body.T(tm);
+        return new Program(decpart, body);
     }
 }
 
@@ -116,12 +120,19 @@ abstract class Statement {
     }
 
     abstract public void V(TypeMap tm);
+
+    abstract public Statement T(TypeMap tm);
 }
 
 class Skip extends Statement {
     @Override
     public void V(TypeMap tm) {
         return;
+    }
+
+    @Override
+    public Skip T(TypeMap tm) {
+        return new Skip();
     }
 }
 
@@ -146,6 +157,17 @@ class Block extends Statement {
         for (Statement s : members) {
             s.V(tm);
         }
+    }
+
+    @Override
+    public Block T(TypeMap tm) {
+        Block b = new Block();
+
+        for (Statement s : members) {
+            b.members.add(s.T(tm));
+        }
+
+        return b;
     }
 }
 
@@ -181,6 +203,30 @@ class Assignment extends Statement {
             else if (ttype == Type.INT) check(stype == Type.CHAR, "assignment type error : " + target);
             else check(false, "assignment type error : " + target);
         }
+    }
+
+    @Override
+    public Assignment T(TypeMap tm) {
+        Expression e = source.T(tm);
+
+        Type ttype = tm.get(target);
+        Type stype = source.typeOf(tm);
+
+        if (ttype == Type.FLOAT) {
+            if (stype == Type.INT) {
+                e = new Unary(new Operator(Operator.I2F), e);
+                stype = Type.FLOAT;
+            }
+        }
+        else if (ttype == Type.INT) {
+            if (stype == Type.CHAR) {
+                e = new Unary(new Operator(Operator.C2I), e);
+                stype = Type.INT;
+            }
+        }
+        check(ttype == stype, "type transform error : " + target);
+
+        return new Assignment(target, e);
     }
 }
 
@@ -235,6 +281,19 @@ class Conditional extends Statement {
             check(false, "conditional type error : " + test);
         }
     }
+
+    @Override
+    public Conditional T(TypeMap tm) {
+        Expression e = test.T(tm);
+        Statement st = thenbranch.T(tm);
+        Statement se = null;
+
+        if (elsebranch != null) {
+            se = elsebranch.T(tm);
+        }
+
+        return new Conditional(e, st, se);
+    }
 }
 
 class Loop extends Statement {
@@ -263,6 +322,14 @@ class Loop extends Statement {
         if (test.typeOf(tm) == Type.BOOL) body.V(tm);
         else check(false, "loop type error : " + test);
     }
+
+    @Override
+    public Loop T(TypeMap tm) {
+        Expression e = test.T(tm);
+        Statement s = body.T(tm);
+
+        return new Loop(e, s);
+    }
 }
 
 abstract class Expression {
@@ -284,6 +351,8 @@ abstract class Expression {
     abstract protected Type typeOf(TypeMap tm);
 
     abstract public void V(TypeMap tm);
+
+    abstract public Expression T(TypeMap tm);
 }
 
 class Variable extends Expression {
@@ -319,6 +388,11 @@ class Variable extends Expression {
     public void V(TypeMap tm) {
         check(tm.containsKey(this), "undeclared variable : " + id);
         return;
+    }
+
+    @Override
+    public Variable T(TypeMap tm) {
+        return this;
     }
 }
 
@@ -399,6 +473,11 @@ class IntValue extends Value {
     public void V(TypeMap tm) {
         return;
     }
+
+    @Override
+    public IntValue T(TypeMap tm) {
+        return this;
+    }
 }
 
 class BoolValue extends Value {
@@ -440,6 +519,11 @@ class BoolValue extends Value {
     public void V(TypeMap tm) {
         return;
     }
+
+    @Override
+    public BoolValue T(TypeMap tm) {
+        return this;
+    }
 }
 
 class CharValue extends Value {
@@ -476,6 +560,11 @@ class CharValue extends Value {
     public void V(TypeMap tm) {
         return;
     }
+
+    @Override
+    public CharValue T(TypeMap tm) {
+        return this;
+    }
 }
 
 class FloatValue extends Value {
@@ -511,6 +600,11 @@ class FloatValue extends Value {
     @Override
     public void V(TypeMap tm) {
         return;
+    }
+
+    @Override
+    public FloatValue T(TypeMap tm) {
+        return this;
     }
 }
 
@@ -565,6 +659,50 @@ class Binary extends Expression {
         }
         else {
             throw new IllegalArgumentException("binary type error : " + op);
+        }
+    }
+
+    @Override
+    public Binary T(TypeMap tm) {
+        Type tp1 = term1.typeOf(tm);
+        Type tp2 = term2.typeOf(tm);
+
+        Expression t1 = term1.T(tm);
+        Expression t2 = term2.T(tm);
+
+        if(op.ArithmeticOp()) {
+            if (tp1 == Type.INT) {
+                return new Binary(Operator.intMap(op.val), t1, t2);
+            }
+            else if (tp1 == Type.FLOAT) {
+                return new Binary(Operator.floatMap(op.val), t1, t2);
+            }
+            else {
+                throw new IllegalArgumentException("type transform error : " + op);
+            }
+        }
+        else if (op.RelationalOp()) {
+            if (tp1 == Type.INT) {
+                return new Binary(Operator.intMap(op.val), t1, t2);
+            }
+            else if (tp1 == Type.FLOAT) {
+                return new Binary(Operator.floatMap(op.val), t1, t2);
+            }
+            else if (tp1 == Type.CHAR) {
+                return new Binary(Operator.charMap(op.val), t1, t2);
+            }
+            else if (tp1 == Type.BOOL) {
+                return new Binary(Operator.boolMap(op.val), t1, t2);
+            }
+            else {
+                throw new IllegalArgumentException("type transform error : " + op);
+            }
+        }
+        else if (op.BooleanOp()) {
+            return new Binary(new Operator(op.val), t1, t2);
+        }
+        else {
+            throw new IllegalArgumentException("type transform error : " + op);
         }
     }
 }
@@ -632,6 +770,47 @@ class Unary extends Expression {
         }
         else {
             throw new IllegalArgumentException("unary type error : " + op);
+        }
+    }
+
+    @Override
+    public Unary T(TypeMap tm) {
+        Type t = term.typeOf(tm);
+        Expression e = term.T(tm);
+
+        if ((t == Type.BOOL) && (op.NotOp())) {
+            return new Unary(new Operator(Operator.NOT), e);
+        }
+        else if (op.NegateOp()) {
+            if (t == Type.FLOAT) {
+                return new Unary(new Operator(Operator.FLOAT_NEG), e);
+            }
+            else if (t == Type.INT) {
+                return new Unary(new Operator(Operator.INT_NEG), e);
+            }
+            else {
+                throw new IllegalArgumentException("type transform error : " + op);
+            }
+        }
+        else if (op.intOp()) {
+            if (t == Type.FLOAT) {
+                return new Unary(new Operator(Operator.F2I), e);
+            }
+            else if (t == Type.CHAR) {
+                return new Unary(new Operator(Operator.C2I), e);
+            }
+            else {
+                throw new IllegalArgumentException("type transform error : " + op);
+            }
+        }
+        else if ((t == Type.INT) && op.floatOp()) {
+            return new Unary(new Operator(Operator.I2F), e);
+        }
+        else if ((t == Type.INT) && op.charOp()) {
+            return new Unary(new Operator(Operator.I2C), e);
+        }
+        else {
+            throw new IllegalArgumentException("type transform error : " + op);
         }
     }
 }
