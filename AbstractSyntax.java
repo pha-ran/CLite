@@ -17,12 +17,13 @@ class Program {
         System.out.println("[ Program AST ]");
         decpart.display(1);
         body.display(1);
+        System.out.println("");
     }
 
-    public TypeMap typing (Declarations ds) {
+    public TypeMap typing () {
         TypeMap tm = new TypeMap();
 
-        for (Declaration d : ds) {
+        for (Declaration d : decpart) {
             tm.put(d.v, d.t);
         }
 
@@ -39,6 +40,20 @@ class Program {
     public Program T(TypeMap tm) {
         body = body.T(tm);
         return new Program(decpart, body);
+    }
+
+    public State initialState() {
+        State state = new State();
+
+        for (Declaration d : decpart) {
+            state.put(d.v, Value.mkValue(d.t));
+        }
+
+        return state;
+    }
+
+    public State M() {
+        return body.M(initialState());
     }
 }
 
@@ -106,9 +121,7 @@ class Type {
 abstract class Statement {
     // Statement = Skip | Block | Assignment | Conditional | Loop
 
-    public void display(int i) {
-
-    }
+    abstract public void display(int i);
 
     protected void check(boolean b, String s) {
         if (b) {
@@ -122,9 +135,14 @@ abstract class Statement {
     abstract public void V(TypeMap tm);
 
     abstract public Statement T(TypeMap tm);
+
+    abstract public State M(State s);
 }
 
 class Skip extends Statement {
+    @Override
+    public void display(int i) { return; }
+
     @Override
     public void V(TypeMap tm) {
         return;
@@ -133,6 +151,11 @@ class Skip extends Statement {
     @Override
     public Skip T(TypeMap tm) {
         return new Skip();
+    }
+
+    @Override
+    public State M(State s) {
+        return s;
     }
 }
 
@@ -168,6 +191,15 @@ class Block extends Statement {
         }
 
         return b;
+    }
+
+    @Override
+    public State M(State s) {
+        for (Statement t : members) {
+            s = t.M(s);
+        }
+
+        return s;
     }
 }
 
@@ -227,6 +259,11 @@ class Assignment extends Statement {
         check(ttype == stype, "type transform error : " + target);
 
         return new Assignment(target, e);
+    }
+
+    @Override
+    public State M(State s) {
+        return s.onion(target, source.M(s));
     }
 }
 
@@ -294,6 +331,19 @@ class Conditional extends Statement {
 
         return new Conditional(e, st, se);
     }
+
+    @Override
+    public State M(State s) {
+        if(test.M(s).boolValue())
+            return thenbranch.M(s);
+        else
+            if (elsebranch != null) {
+                return elsebranch.M(s);
+            }
+            else {
+                return s;
+            }
+    }
 }
 
 class Loop extends Statement {
@@ -330,14 +380,20 @@ class Loop extends Statement {
 
         return new Loop(e, s);
     }
+
+    @Override
+    public State M(State s) {
+        if (test.M(s).boolValue())
+            return this.M(body.M(s));
+        else
+            return s;
+    }
 }
 
 abstract class Expression {
     // Expression = Variable | Value | Binary | Unary
 
-    public void display(int i) {
-
-    }
+    abstract public void display(int i);
 
     protected void check(boolean b, String s) {
         if (b) {
@@ -353,6 +409,8 @@ abstract class Expression {
     abstract public void V(TypeMap tm);
 
     abstract public Expression T(TypeMap tm);
+
+    abstract public Value M(State s);
 }
 
 class Variable extends Expression {
@@ -394,6 +452,11 @@ class Variable extends Expression {
     public Variable T(TypeMap tm) {
         return this;
     }
+
+    @Override
+    public Value M(State s) {
+        return s.get(this);
+    }
 }
 
 abstract class Value extends Expression {
@@ -432,10 +495,6 @@ abstract class Value extends Expression {
         if (type == Type.CHAR) return new CharValue( );
         if (type == Type.FLOAT) return new FloatValue( );
         throw new IllegalArgumentException("Illegal type in mkValue");
-    }
-
-    public void display(int i) {
-
     }
 }
 
@@ -476,6 +535,11 @@ class IntValue extends Value {
 
     @Override
     public IntValue T(TypeMap tm) {
+        return this;
+    }
+
+    @Override
+    public Value M(State s) {
         return this;
     }
 }
@@ -524,6 +588,11 @@ class BoolValue extends Value {
     public BoolValue T(TypeMap tm) {
         return this;
     }
+
+    @Override
+    public Value M(State s) {
+        return this;
+    }
 }
 
 class CharValue extends Value {
@@ -565,6 +634,11 @@ class CharValue extends Value {
     public CharValue T(TypeMap tm) {
         return this;
     }
+
+    @Override
+    public Value M(State s) {
+        return this;
+    }
 }
 
 class FloatValue extends Value {
@@ -604,6 +678,11 @@ class FloatValue extends Value {
 
     @Override
     public FloatValue T(TypeMap tm) {
+        return this;
+    }
+
+    @Override
+    public Value M(State s) {
         return this;
     }
 }
@@ -704,6 +783,93 @@ class Binary extends Expression {
         else {
             throw new IllegalArgumentException("type transform error : " + op);
         }
+    }
+
+    @Override
+    public Value M(State s) {
+        return applyBinary(term1.M(s), term2.M(s));
+    }
+
+    private Value applyBinary(Value v1, Value v2) { // Binary 계산
+        check(!v1.isUndef() && !v2.isUndef(), "undef value error : " + op);
+
+        if (op.val.equals(Operator.INT_PLUS))
+            return new IntValue(v1.intValue( ) + v2.intValue( ));
+        if (op.val.equals(Operator.INT_MINUS))
+            return new IntValue(v1.intValue( ) - v2.intValue( ));
+        if (op.val.equals(Operator.INT_TIMES))
+            return new IntValue(v1.intValue( ) * v2.intValue( ));
+        if (op.val.equals(Operator.INT_DIV))
+            return new IntValue(v1.intValue( ) / v2.intValue( ));
+
+        if (op.val.equals(Operator.FLOAT_PLUS))
+            return new FloatValue(v1.floatValue( ) + v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_MINUS))
+            return new FloatValue(v1.floatValue( ) - v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_TIMES))
+            return new FloatValue(v1.floatValue( ) * v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_DIV))
+            return new FloatValue(v1.floatValue( ) / v2.floatValue( ));
+
+        if (op.val.equals(Operator.INT_LT))
+            return new BoolValue(v1.intValue( ) < v2.intValue( ));
+        if (op.val.equals(Operator.INT_LE))
+            return new BoolValue(v1.intValue( ) <= v2.intValue( ));
+        if (op.val.equals(Operator.INT_EQ))
+            return new BoolValue(v1.intValue( ) == v2.intValue( ));
+        if (op.val.equals(Operator.INT_NE))
+            return new BoolValue(v1.intValue( ) != v2.intValue( ));
+        if (op.val.equals(Operator.INT_GT))
+            return new BoolValue(v1.intValue( ) > v2.intValue( ));
+        if (op.val.equals(Operator.INT_GE))
+            return new BoolValue(v1.intValue( ) >= v2.intValue( ));
+
+        if (op.val.equals(Operator.FLOAT_LT))
+            return new BoolValue(v1.floatValue( ) <  v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_LE))
+            return new BoolValue(v1.floatValue( ) <= v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_EQ))
+            return new BoolValue(v1.floatValue( ) == v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_NE))
+            return new BoolValue(v1.floatValue( ) != v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_GT))
+            return new BoolValue(v1.floatValue( ) >  v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_GE))
+            return new BoolValue(v1.floatValue( ) >= v2.floatValue( ));
+
+        if (op.val.equals(Operator.CHAR_LT))
+            return new BoolValue(v1.charValue( ) <  v2.charValue( ));
+        if (op.val.equals(Operator.CHAR_LE))
+            return new BoolValue(v1.charValue( ) <= v2.charValue( ));
+        if (op.val.equals(Operator.CHAR_EQ))
+            return new BoolValue(v1.charValue( ) == v2.charValue( ));
+        if (op.val.equals(Operator.CHAR_NE))
+            return new BoolValue(v1.charValue( ) != v2.charValue( ));
+        if (op.val.equals(Operator.CHAR_GT))
+            return new BoolValue(v1.charValue( ) >  v2.charValue( ));
+        if (op.val.equals(Operator.CHAR_GE))
+            return new BoolValue(v1.charValue( ) >= v2.charValue( ));
+
+        if (op.val.equals(Operator.BOOL_EQ))
+            return new BoolValue(v1.boolValue( ) == v2.boolValue( ));
+        if (op.val.equals(Operator.BOOL_NE))
+            return new BoolValue(v1.boolValue( ) != v2.boolValue( ));
+//        // 자바에서는 boolean의 비교 불가능
+//        if (op.val.equals(Operator.BOOL_LT))
+//            return new BoolValue(v1.boolValue( ) < v2.boolValue( ));
+//        if (op.val.equals(Operator.BOOL_LE))
+//            return new BoolValue(v1.boolValue( ) <= v2.boolValue( ));
+//        if (op.val.equals(Operator.BOOL_GT))
+//            return new BoolValue(v1.boolValue( ) > v2.boolValue( ));
+//        if (op.val.equals(Operator.BOOL_GE))
+//            return new BoolValue(v1.boolValue( ) >= v2.boolValue( ));
+
+        if (op.val.equals(Operator.AND))
+            return new BoolValue(v1.boolValue( ) && v2.boolValue( ));
+        if (op.val.equals(Operator.OR))
+            return new BoolValue(v1.boolValue( ) || v2.boolValue( ));
+
+        throw new IllegalArgumentException("apply binary error : " + op);
     }
 }
 
@@ -812,6 +978,32 @@ class Unary extends Expression {
         else {
             throw new IllegalArgumentException("type transform error : " + op);
         }
+    }
+
+    @Override
+    public Value M(State s) {
+        return applyUnary(term.M(s));
+    }
+
+    private Value applyUnary(Value v) {
+        check(!v.isUndef(), "undef value error : " + op);
+
+        if (op.val.equals(Operator.NOT))
+            return new BoolValue(!v.boolValue( ));
+        if (op.val.equals(Operator.INT_NEG))
+            return new IntValue(-v.intValue( ));
+        if (op.val.equals(Operator.FLOAT_NEG))
+            return new FloatValue(-v.floatValue( ));
+        if (op.val.equals(Operator.I2F))
+            return new FloatValue((float)(v.intValue( )));
+        if (op.val.equals(Operator.F2I))
+            return new IntValue((int)(v.floatValue( )));
+        if (op.val.equals(Operator.C2I))
+            return new IntValue((int)(v.charValue( )));
+        if (op.val.equals(Operator.I2C))
+            return new CharValue((char)(v.intValue( )));
+
+        throw new IllegalArgumentException("apply binary error : " + op);
     }
 }
 
