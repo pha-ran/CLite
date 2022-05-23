@@ -24,7 +24,7 @@ public class Semantics {
             System.out.println("[ Program is Valid ]\n");
 
             prog = prog.T(tm);
-            //prog.display();
+            prog.display();
 
             State res = prog.M();
             System.out.println("[ Program Meaning ]");

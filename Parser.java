@@ -342,7 +342,8 @@ public class Parser {
     
     private boolean isMultiplyOp( ) {
         return token.type().equals(TokenType.Multiply) ||
-               token.type().equals(TokenType.Divide);
+               token.type().equals(TokenType.Divide) ||
+               token.type().equals(TokenType.Remain);
     }
     
     private boolean isUnaryOp( ) {

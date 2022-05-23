@@ -24,9 +24,11 @@ int main ( ) {
         j = char(n * 6);
         j = j + int(f);
         j = j - int(a * c);
+        j = (-j) % n;
     }
     else {
-        if (a <= c) b = -a;
+        a = float(n + 1);
+        if (a <= c) b = b % a;
     }
     while (i < n) {
         i = i + 1;

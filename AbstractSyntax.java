@@ -801,6 +801,8 @@ class Binary extends Expression {
             return new IntValue(v1.intValue( ) * v2.intValue( ));
         if (op.val.equals(Operator.INT_DIV))
             return new IntValue(v1.intValue( ) / v2.intValue( ));
+        if (op.val.equals(Operator.INT_REM))
+            return new IntValue(v1.intValue( ) % v2.intValue( ));
 
         if (op.val.equals(Operator.FLOAT_PLUS))
             return new FloatValue(v1.floatValue( ) + v2.floatValue( ));
@@ -810,6 +812,8 @@ class Binary extends Expression {
             return new FloatValue(v1.floatValue( ) * v2.floatValue( ));
         if (op.val.equals(Operator.FLOAT_DIV))
             return new FloatValue(v1.floatValue( ) / v2.floatValue( ));
+        if (op.val.equals(Operator.FLOAT_REM))
+            return new FloatValue(v1.floatValue( ) % v2.floatValue( ));
 
         if (op.val.equals(Operator.INT_LT))
             return new BoolValue(v1.intValue( ) < v2.intValue( ));
@@ -1024,6 +1028,7 @@ class Operator {
     final static String MINUS = "-";
     final static String TIMES = "*";
     final static String DIV = "/";
+    final static String REM = "%";
     // UnaryOp = !    
     final static String NOT = "!";
     final static String NEG = "-";
@@ -1044,6 +1049,7 @@ class Operator {
     final static String INT_MINUS = "INT-";
     final static String INT_TIMES = "INT*";
     final static String INT_DIV = "INT/";
+    final static String INT_REM = "INT%";
     // UnaryOp = !    
     final static String INT_NEG = "-";
     // RelationalOp = < | <= | == | != | >= | >
@@ -1058,6 +1064,7 @@ class Operator {
     final static String FLOAT_MINUS = "FLOAT-";
     final static String FLOAT_TIMES = "FLOAT*";
     final static String FLOAT_DIV = "FLOAT/";
+    final static String FLOAT_REM = "FLOAT%";
     // UnaryOp = !    
     final static String FLOAT_NEG = "-";
     // RelationalOp = < | <= | == | != | >= | >
@@ -1094,7 +1101,7 @@ class Operator {
     }
     boolean ArithmeticOp ( ) {
         return val.equals(PLUS) || val.equals(MINUS)
-            || val.equals(TIMES) || val.equals(DIV);
+            || val.equals(TIMES) || val.equals(DIV) || val.equals(REM);
     }
     boolean NotOp ( ) { return val.equals(NOT) ; }
     boolean NegateOp ( ) { return val.equals(NEG) ; }
@@ -1104,7 +1111,7 @@ class Operator {
 
     final static String intMap[ ] [ ] = {
         {PLUS, INT_PLUS}, {MINUS, INT_MINUS},
-        {TIMES, INT_TIMES}, {DIV, INT_DIV},
+        {TIMES, INT_TIMES}, {DIV, INT_DIV}, {REM, INT_REM},
         {EQ, INT_EQ}, {NE, INT_NE}, {LT, INT_LT},
         {LE, INT_LE}, {GT, INT_GT}, {GE, INT_GE},
         {NEG, INT_NEG}, {FLOAT, I2F}, {CHAR, I2C}
@@ -1112,7 +1119,7 @@ class Operator {
 
     final static String floatMap[ ] [ ] = {
         {PLUS, FLOAT_PLUS}, {MINUS, FLOAT_MINUS},
-        {TIMES, FLOAT_TIMES}, {DIV, FLOAT_DIV},
+        {TIMES, FLOAT_TIMES}, {DIV, FLOAT_DIV}, {REM, FLOAT_REM},
         {EQ, FLOAT_EQ}, {NE, FLOAT_NE}, {LT, FLOAT_LT},
         {LE, FLOAT_LE}, {GT, FLOAT_GT}, {GE, FLOAT_GE},
         {NEG, FLOAT_NEG}, {INT, F2I}

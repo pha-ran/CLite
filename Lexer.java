@@ -91,7 +91,9 @@ public class Lexer {
             	return Token.minusTok;
             case '*': ch = nextChar();
             	return Token.multiplyTok;
-            
+            case '%': ch = nextChar();
+                return Token.remainTok;
+
             case '(': ch = nextChar();
             	return Token.leftParenTok;
             case ')': ch = nextChar();
