@@ -51,7 +51,8 @@ public class Parser {
                 token.type().equals(TokenType.LeftBrace) ||
                 token.type().equals(TokenType.Identifier) ||
                 token.type().equals(TokenType.If) ||
-                token.type().equals(TokenType.While))
+                token.type().equals(TokenType.While) ||
+                token.type().equals(TokenType.Print))
         {
             Statement s = statement();
             b.members.add(s);
@@ -111,7 +112,7 @@ public class Parser {
     }
   
     private Statement statement() {
-        // Statement --> ; | Block | Assignment | IfStatement | WhileStatement
+        // Statement --> ; | Block | Assignment | IfStatement | WhileStatement | PrintStatement
         Statement s = new Skip();
 
         // student exercise
@@ -123,6 +124,8 @@ public class Parser {
             s = ifStatement();
         else if(token.type().equals(TokenType.While))
             s = whileStatement();
+        else if(token.type().equals(TokenType.Print))
+            s = printStatement();
         else if(token.type().equals(TokenType.Semicolon))
             token = lexer.next();
 
@@ -140,7 +143,8 @@ public class Parser {
                 token.type().equals(TokenType.LeftBrace) ||
                 token.type().equals(TokenType.Identifier) ||
                 token.type().equals(TokenType.If) ||
-                token.type().equals(TokenType.While))
+                token.type().equals(TokenType.While) ||
+                token.type().equals(TokenType.Print))
         {
             Statement s = statement();
             b.members.add(s);
@@ -176,7 +180,7 @@ public class Parser {
 
         Conditional c;
 
-        if (token.type().equals(TokenType.Else)) { // match 사용 X
+        if (token.type().equals(TokenType.Else)) { // match X
             token = lexer.next();
             Statement es = statement();
             c = new Conditional(e, s, es);
@@ -199,6 +203,23 @@ public class Parser {
         Statement s = statement();
 
         return new Loop(e, s);  // student exercise
+    }
+
+    private Print printStatement () {
+        match(TokenType.Print);
+
+        Value val = null;
+        Variable var = null;
+
+        if (token.type().equals(TokenType.Identifier)) {
+            var = new Variable(match(TokenType.Identifier));
+        } else if (isLiteral()) {
+            val = literal();
+        } else error("Identifier | Literal");
+
+        match(TokenType.Semicolon);
+
+        return new Print(val, var);
     }
 
     private Expression expression () {

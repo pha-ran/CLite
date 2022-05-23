@@ -4,8 +4,6 @@ public class Token {
 
     private static final String[] reserved = new String[KEYWORDS];
     private static Token[] token = new Token[KEYWORDS];
-
-    // 모든 토큰 객체 생성
     public static final Token eofTok = new Token(TokenType.Eof, "<<EOF>>");
     public static final Token boolTok = new Token(TokenType.Bool, "bool");
     public static final Token charTok = new Token(TokenType.Char, "char");
@@ -17,6 +15,7 @@ public class Token {
     public static final Token mainTok = new Token(TokenType.Main, "main");
     public static final Token trueTok = new Token(TokenType.True, "true");
     public static final Token whileTok = new Token(TokenType.While, "while");
+    public static final Token printTok = new Token(TokenType.Print, "print");
     public static final Token leftBraceTok = new Token(TokenType.LeftBrace, "{");
     public static final Token rightBraceTok = new Token(TokenType.RightBrace, "}");
     public static final Token leftBracketTok = new Token(TokenType.LeftBracket, "[");
@@ -47,10 +46,10 @@ public class Token {
     private Token (TokenType t, String v) {
         type = t;
         value = v;
-        if (t.compareTo(TokenType.Eof) < 0) { // t가 예약어이면
-            int ti = t.ordinal(); // 예약어 번호
-            reserved[ti] = v; // 예약어 문자열 배열에 값 대입
-            token[ti] = this; // 예약어 배열에 생성한 객체 저장
+        if (t.compareTo(TokenType.Eof) < 0) {
+            int ti = t.ordinal();
+            reserved[ti] = v;
+            token[ti] = this;
         }
     }
 

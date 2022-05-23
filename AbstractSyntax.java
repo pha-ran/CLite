@@ -119,7 +119,7 @@ class Type {
 }
 
 abstract class Statement {
-    // Statement = Skip | Block | Assignment | Conditional | Loop
+    // Statement = Skip | Block | Assignment | Conditional | Loop | Print
 
     abstract public void display(int i);
 
@@ -387,6 +387,62 @@ class Loop extends Statement {
             return this.M(body.M(s));
         else
             return s;
+    }
+}
+
+class Print extends Statement {
+    Value val;
+    Variable var;
+
+    Print(Value vl, Variable vr) {
+        val = vl;
+        var = vr;
+    }
+
+    @Override
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Print :");
+
+        if (var == null) {
+            val.display(i + 1);
+        }
+        else {
+            var.display(i + 1);
+        }
+    }
+
+    @Override
+    public void V(TypeMap tm) {
+        if (var == null) {
+            val.V(tm);
+        }
+        else {
+            var.V(tm);
+        }
+    }
+
+    @Override
+    public Print T(TypeMap tm) {
+        return this;
+    }
+
+    @Override
+    public State M(State s) {
+        if (var == null) {
+            System.out.print(val);
+        }
+        else {
+            if (s.get(var).isUndef()) {
+                System.out.print("Undefined Variable");
+            }
+            else {
+                System.out.print(s.get(var));
+            }
+        }
+        return s;
     }
 }
 
@@ -790,7 +846,7 @@ class Binary extends Expression {
         return applyBinary(term1.M(s), term2.M(s));
     }
 
-    private Value applyBinary(Value v1, Value v2) { // Binary 계산
+    private Value applyBinary(Value v1, Value v2) {
         check(!v1.isUndef() && !v2.isUndef(), "undef value error : " + op);
 
         if (op.val.equals(Operator.INT_PLUS))
@@ -858,7 +914,7 @@ class Binary extends Expression {
             return new BoolValue(v1.boolValue( ) == v2.boolValue( ));
         if (op.val.equals(Operator.BOOL_NE))
             return new BoolValue(v1.boolValue( ) != v2.boolValue( ));
-//        // 자바에서는 boolean의 비교 불가능
+//        // Unable to compare boolean in Java
 //        if (op.val.equals(Operator.BOOL_LT))
 //            return new BoolValue(v1.boolValue( ) < v2.boolValue( ));
 //        if (op.val.equals(Operator.BOOL_LE))

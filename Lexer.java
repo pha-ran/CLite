@@ -12,7 +12,7 @@ public class Lexer {
         + "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private final String digits = "0123456789";
     private final char eolnCh = '\n';
-    private final char eofCh = '\004'; // 전송 종료 문자
+    private final char eofCh = '\004';
     
 
     public Lexer (String fileName) { // source filename
@@ -29,9 +29,9 @@ public class Lexer {
         if (ch == eofCh)
             error("Attempt to read past end of file");
         col++;
-        if (col >= line.length()) { // 한 라인이 끝나면
+        if (col >= line.length()) {
             try {
-                line = input.readLine( ); // 다음 라인 읽기
+                line = input.readLine( );
             } catch (IOException e) {
                 System.err.println(e);
                 System.exit(1);
@@ -41,11 +41,11 @@ public class Lexer {
             else {
                 // System.out.println(lineno + ":\t" + line);
                 lineno++;
-                line += eolnCh; // 라인의 끝 삽입
+                line += eolnCh;
             } // if line
-            col = 0; // 열 초기화
+            col = 0;
         } // if col
-        return line.charAt(col); // 열 번호에 해당하는 문자 반환
+        return line.charAt(col);
     }
             
 
@@ -77,6 +77,20 @@ public class Lexer {
             
             case '\'':  // char literal
                 char ch1 = nextChar();
+
+                if (ch1 == '\\') {
+                    ch1 = nextChar();
+
+                    if (ch1 == 'n') {
+                        nextChar();
+                        ch = nextChar();
+                        return Token.mkCharLiteral("\n");
+                    }
+                    else {
+                        error("Illegal character " + "\\" + ch1);
+                    }
+                }
+
                 nextChar(); // get '
                 ch = nextChar();
                 return Token.mkCharLiteral("" + ch1);

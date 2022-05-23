@@ -14,7 +14,6 @@ int main ( ) {
     b = 99.125;
     c = 80;
     d = 'd';
-    e = 'e';
     f = 'f';
     g = true;
     h = false;
@@ -34,4 +33,15 @@ int main ( ) {
         i = i + 1;
         result = result * i;
     }
+
+    d = '\n';
+
+    print f;
+    print ' ';
+    print j;
+    print '\n';
+    print e;
+    print '\n';
+    print 'H';print 'e';print 'l';print 'l';print 'o';print ' ';print 'W';print 'o';print 'r';print 'l';print 'd';print '!';
+    print '\n';
 }

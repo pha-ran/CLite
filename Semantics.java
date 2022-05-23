@@ -1,7 +1,7 @@
 import java.util.HashMap;
 
 class State extends HashMap<Variable, Value> {
-    public State onion(Variable key, Value val) { // 해당 변수의 값을 변경
+    public State onion(Variable key, Value val) {
         put(key, val);
         return this;
     }
@@ -26,8 +26,9 @@ public class Semantics {
             prog = prog.T(tm);
             prog.display();
 
-            State res = prog.M();
             System.out.println("[ Program Meaning ]");
+            State res = prog.M();
+            System.out.println("");
             res.display();
         } catch (Exception e) {
             System.err.println(e.getMessage());
