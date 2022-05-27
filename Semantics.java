@@ -29,7 +29,7 @@ public class Semantics {
             System.out.println("[ Program Meaning ]");
             State res = prog.M();
             System.out.println("");
-            res.display();
+            //res.display();
         } catch (Exception e) {
             System.err.println(e.getMessage());
             System.exit(1);

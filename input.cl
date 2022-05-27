@@ -44,4 +44,10 @@ int main ( ) {
     print '\n';
     print 'H';print 'e';print 'l';print 'l';print 'o';print ' ';print 'W';print 'o';print 'r';print 'l';print 'd';print '!';
     print '\n';
+
+    print 1 + 5 + 10 - 10 - int(5.000000);
+    print '\n';
+    print (3+5)*9;
+    print '\n';
+    print true;
 }

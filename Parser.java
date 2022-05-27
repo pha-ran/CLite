@@ -208,18 +208,11 @@ public class Parser {
     private Print printStatement () {
         match(TokenType.Print);
 
-        Value val = null;
-        Variable var = null;
-
-        if (token.type().equals(TokenType.Identifier)) {
-            var = new Variable(match(TokenType.Identifier));
-        } else if (isLiteral()) {
-            val = literal();
-        } else error("Identifier | Literal");
+        Expression e = expression();
 
         match(TokenType.Semicolon);
 
-        return new Print(val, var);
+        return new Print(e);
     }
 
     private Expression expression () {

@@ -391,12 +391,10 @@ class Loop extends Statement {
 }
 
 class Print extends Statement {
-    Value val;
-    Variable var;
+    Expression expression;
 
-    Print(Value vl, Variable vr) {
-        val = vl;
-        var = vr;
+    Print(Expression e) {
+        expression = e;
     }
 
     @Override
@@ -406,42 +404,35 @@ class Print extends Statement {
         }
         System.out.println("Print :");
 
-        if (var == null) {
-            val.display(i + 1);
-        }
-        else {
-            var.display(i + 1);
-        }
+        expression.display(i + 1);
     }
 
     @Override
     public void V(TypeMap tm) {
-        if (var == null) {
-            val.V(tm);
-        }
-        else {
-            var.V(tm);
-        }
+        expression.V(tm);
     }
 
     @Override
     public Print T(TypeMap tm) {
-        return this;
+        Expression e = expression.T(tm);
+
+        return new Print(e);
     }
 
     @Override
     public State M(State s) {
-        if (var == null) {
-            System.out.print(val);
-        }
-        else {
-            if (s.get(var).isUndef()) {
-                System.out.print("Undefined Variable");
-            }
-            else {
-                System.out.print(s.get(var));
-            }
-        }
+        Value v = expression.M(s);
+
+//        if (v.isUndef()) {
+//            System.out.print("Undefined Variable");
+//        }
+//        else {
+//            if (v.type == Type.CHAR) System.out.print((int)v.charValue());
+//            else System.out.print(v);
+//        }
+
+        System.out.print(v);
+
         return s;
     }
 }

@@ -4,6 +4,7 @@ public class Token {
 
     private static final String[] reserved = new String[KEYWORDS];
     private static Token[] token = new Token[KEYWORDS];
+
     public static final Token eofTok = new Token(TokenType.Eof, "<<EOF>>");
     public static final Token boolTok = new Token(TokenType.Bool, "bool");
     public static final Token charTok = new Token(TokenType.Char, "char");
