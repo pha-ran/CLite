@@ -1,4 +1,5 @@
 import java.util.HashMap;
+import java.util.Stack;
 
 class State extends HashMap<Variable, Value> {
     public State onion(Variable key, Value val) {
@@ -13,23 +14,35 @@ class State extends HashMap<Variable, Value> {
 }
 
 public class Semantics {
+    public static Stack<Function> callStack = new Stack<>();
+
+    public static State initialState(Declarations declarations) {
+        State state = new State();
+
+        for (Declaration d : declarations) {
+            state.put(d.v, Value.mkValue(d.t));
+        }
+
+        return state;
+    }
     public static void main(String[] args) {
         try {
             Parser parser  = new Parser(new Lexer(args[0]));
             Program prog = parser.program();
             //prog.display();
-            TypeMap tm = prog.typing();
 
-            prog.V(tm);
+            TypeMap gm = TypeChecker.typing(prog.globals);
+            prog.V(gm);
             System.out.println("[ Program is Valid ]\n");
 
-            prog = prog.T(tm);
+            prog = prog.T(gm);
             prog.display();
 
             System.out.println("[ Program Meaning ]");
             State res = prog.M();
-            System.out.println("");
-            //res.display();
+
+            System.out.println("\n\n[ Final Globals ]");
+            res.display();
         } catch (Exception e) {
             System.err.println(e.getMessage());
             System.exit(1);

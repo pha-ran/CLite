@@ -36,47 +36,131 @@ public class Parser {
     }
   
     public Program program() {
-        // Program --> int main ( ) '{' Declarations Statements '}'
-        TokenType[ ] header = {TokenType.Int, TokenType.Main,
-                          TokenType.LeftParen, TokenType.RightParen};
-        for (int i=0; i<header.length; i++)   // bypass "int main ( )"
-            match(header[i]);
-        match(TokenType.LeftBrace);
-
-        // student exercise
-        Declarations ds = declarations();
-
-        Block b = new Block();
-        while (token.type().equals(TokenType.Semicolon) ||
-                token.type().equals(TokenType.LeftBrace) ||
-                token.type().equals(TokenType.Identifier) ||
-                token.type().equals(TokenType.If) ||
-                token.type().equals(TokenType.While) ||
-                token.type().equals(TokenType.Print))
-        {
-            Statement s = statement();
-            b.members.add(s);
-        }
-
-        match(TokenType.RightBrace);
-
-        return new Program(ds, b);  // student exercise
+        Functions functions = new Functions();
+        Declarations globals = declarations(functions);
+        functions = functions(functions);
+        return new Program(globals, functions);
     }
   
-    private Declarations declarations () {
+    private Declarations declarations(Functions fs) {
         // Declarations --> { Declaration }
         Declarations ds = new Declarations();
 
         while (isType()) {
-            declaration(ds);
+            declaration(ds, fs);
         }
 
         return ds;  // student exercise
     }
   
-    private void declaration (Declarations ds) {
+    private void declaration (Declarations ds, Functions fs) {
         // Declaration  --> Type Identifier { , Identifier } ;
         // student exercise
+        Type t = type();
+
+        if (token.type().equals(TokenType.Main)) {
+            match(TokenType.Main);
+            function(fs, new Variable("main"), t);
+            return;
+        }
+
+        Variable v = new Variable(match(TokenType.Identifier));
+        Declaration d = new Declaration(v, t);
+        ds.add(d);
+
+        if (token.type().equals(TokenType.Comma)) {
+            while (token.type().equals(TokenType.Comma)) {
+                token = lexer.next();
+                v = new Variable(match(TokenType.Identifier));
+                d = new Declaration(v, t);
+                ds.add(d);
+            }
+        }
+        else {
+            if (!token.type().equals(TokenType.Semicolon)) {
+                ds.remove(ds.size() - 1);
+                function(fs, v, t);
+                return;
+            }
+        }
+
+        match(TokenType.Semicolon);
+    }
+
+    private Functions functions(Functions fs) {
+        while (isType()) {
+            function(fs);
+        }
+        return fs;
+    }
+
+    private void function(Functions fs) {
+        Type t = type();
+        Variable v;
+        if (token.type().equals(TokenType.Main)) {
+            match(TokenType.Main);
+            v = new Variable("main");
+        }
+        else {
+            v = new Variable(match(TokenType.Identifier));
+        }
+        match(TokenType.LeftParen);
+        Declarations params = params();
+        match(TokenType.RightParen);
+        match(TokenType.LeftBrace);
+        Declarations locals = locals();
+        Block b = statements(v);
+        match(TokenType.RightBrace);
+
+        Function f = new Function(v, t, params, locals, b);
+        fs.add(f);
+    }
+
+    private void function(Functions fs, Variable v, Type t) {
+        match(TokenType.LeftParen);
+        Declarations params = params();
+        match(TokenType.RightParen);
+        match(TokenType.LeftBrace);
+        Declarations locals = locals();
+        Block b = statements(v);
+        match(TokenType.RightBrace);
+
+        Function f = new Function(v, t, params, locals, b);
+        fs.add(f);
+    }
+
+    private Declarations params() {
+        Declarations ds = new Declarations();
+        if (isType()) {
+            param(ds);
+        }
+        return ds;
+    }
+
+    private void param(Declarations ds) {
+        Type t = type();
+        Variable v = new Variable(match(TokenType.Identifier));
+        Declaration d = new Declaration(v, t);
+        ds.add(d);
+
+        while (token.type().equals(TokenType.Comma)) {
+            token = lexer.next();
+            t = type();
+            v = new Variable(match(TokenType.Identifier));
+            d = new Declaration(v, t);
+            ds.add(d);
+        }
+    }
+
+    private Declarations locals() {
+        Declarations locals = new Declarations();
+        while (isType()) {
+            local(locals);
+        }
+        return locals;
+    }
+
+    private void local(Declarations ds) {
         Type t = type();
         Variable v = new Variable(match(TokenType.Identifier));
         Declaration d = new Declaration(v, t);
@@ -93,7 +177,7 @@ public class Parser {
     }
   
     private Type type () {
-        // Type  -->  int | bool | float | char 
+        // Type  -->  int | bool | float | char | void
         Type t = null;
 
         // student exercise
@@ -105,59 +189,86 @@ public class Parser {
             t= Type.FLOAT;
         else if(token.type().equals(TokenType.Char))
             t= Type.CHAR;
+        else if (token.type().equals(TokenType.Void))
+            t = Type.VOID;
+        else error("Type Error : " + token.type());
 
         token = lexer.next();
 
         return t;
     }
   
-    private Statement statement() {
+    private Statement statement(Variable fname) {
         // Statement --> ; | Block | Assignment | IfStatement | WhileStatement | PrintStatement
+        // | StatementCallStatement | ReturnStatement
         Statement s = new Skip();
 
         // student exercise
         if(token.type().equals(TokenType.LeftBrace))
-            s = statements();
-        else if(token.type().equals(TokenType.Identifier))
-            s = assignment();
+            s = statements(fname);
+        else if(token.type().equals(TokenType.Identifier)) {
+            Variable v = new Variable(match(TokenType.Identifier));
+
+            if (token.type().equals(TokenType.Assign)) {
+                s = assignment(v);
+            } else if (token.type().equals(TokenType.LeftParen)) {
+                s = callStatement(v);
+            }
+        }
         else if(token.type().equals(TokenType.If))
-            s = ifStatement();
+            s = ifStatement(fname);
         else if(token.type().equals(TokenType.While))
-            s = whileStatement();
+            s = whileStatement(fname);
         else if(token.type().equals(TokenType.Print))
             s = printStatement();
         else if(token.type().equals(TokenType.Semicolon))
             token = lexer.next();
+        else if (token.type().equals(TokenType.Return))
+            s = returnStatement(fname);
 
         return s;
     }
   
-    private Block statements () {
+    private Block statements (Variable fname) {
         // Block --> '{' Statements '}'
         Block b = new Block();
 
-        // student exercise
-        match(TokenType.LeftBrace);
+        if (token.type().equals(TokenType.LeftBrace)) {
+            match(TokenType.LeftBrace);
 
-        while(token.type().equals(TokenType.Semicolon) ||
-                token.type().equals(TokenType.LeftBrace) ||
-                token.type().equals(TokenType.Identifier) ||
-                token.type().equals(TokenType.If) ||
-                token.type().equals(TokenType.While) ||
-                token.type().equals(TokenType.Print))
-        {
-            Statement s = statement();
-            b.members.add(s);
+            while (token.type().equals(TokenType.Semicolon) ||
+                    token.type().equals(TokenType.LeftBrace) ||
+                    token.type().equals(TokenType.Identifier) ||
+                    token.type().equals(TokenType.If) ||
+                    token.type().equals(TokenType.While) ||
+                    token.type().equals(TokenType.Print) ||
+                    token.type().equals(TokenType.Return))
+            {
+                Statement s = statement(fname);
+                b.members.add(s);
+            }
+
+            match(TokenType.RightBrace);
         }
-
-        match(TokenType.RightBrace);
+        else {
+            while (token.type().equals(TokenType.Semicolon) ||
+                    token.type().equals(TokenType.LeftBrace) ||
+                    token.type().equals(TokenType.Identifier) ||
+                    token.type().equals(TokenType.If) ||
+                    token.type().equals(TokenType.While) ||
+                    token.type().equals(TokenType.Print) ||
+                    token.type().equals(TokenType.Return))
+            {
+                Statement s = statement(fname);
+                b.members.add(s);
+            }
+        }
 
         return b;
     }
   
-    private Assignment assignment () {
+    private Assignment assignment (Variable v) {
         // Assignment --> Identifier = Expression ;
-        Variable v = new Variable(match(TokenType.Identifier));
 
         match(TokenType.Assign);
 
@@ -167,8 +278,33 @@ public class Parser {
 
         return new Assignment(v, e);  // student exercise
     }
-  
-    private Conditional ifStatement () {
+
+    private Statement callStatement(Variable fname) {
+        ArrayList<Expression> params = new ArrayList<>();
+        match(TokenType.LeftParen);
+
+        while (!token.type().equals(TokenType.RightParen)) {
+            Expression e = expression();
+            params.add(e);
+            if (token.type().equals(TokenType.Comma))
+                match(TokenType.Comma);
+        }
+
+        match(TokenType.RightParen);
+        match(TokenType.Semicolon);
+
+        return new StatementCall(fname, params);
+    }
+
+    private Statement returnStatement(Variable fname) {
+        match(TokenType.Return);
+        Expression val = expression();
+        match(TokenType.Semicolon);
+
+        return new Return(fname, val);
+    }
+
+    private Conditional ifStatement (Variable fname) {
         // IfStatement --> if ( Expression ) Statement [ else Statement ]
         match(TokenType.If);
 
@@ -176,13 +312,13 @@ public class Parser {
         Expression e = expression();
         match(TokenType.RightParen);
 
-        Statement s = statement();
+        Statement s = statement(fname);
 
         Conditional c;
 
         if (token.type().equals(TokenType.Else)) { // match X
             token = lexer.next();
-            Statement es = statement();
+            Statement es = statement(fname);
             c = new Conditional(e, s, es);
         }
         else {
@@ -192,7 +328,7 @@ public class Parser {
         return c;  // student exercise
     }
   
-    private Loop whileStatement () {
+    private Loop whileStatement (Variable fname) {
         // WhileStatement --> while ( Expression ) Statement
         match(TokenType.While);
 
@@ -200,7 +336,7 @@ public class Parser {
         Expression e = expression();
         match(TokenType.RightParen);
 
-        Statement s = statement();
+        Statement s = statement(fname);
 
         return new Loop(e, s);  // student exercise
     }
@@ -304,7 +440,23 @@ public class Parser {
         //             | Type ( Expression )
         Expression e = null;
         if (token.type().equals(TokenType.Identifier)) {
-            e = new Variable(match(TokenType.Identifier));
+            Variable v = new Variable(match(TokenType.Identifier));
+
+            if (token.type().equals(TokenType.LeftParen)) {
+                ArrayList<Expression> params = new ArrayList<>();
+                match(TokenType.LeftParen);
+                while (!token.type().equals(TokenType.RightParen)) {
+                    Expression p = expression();
+                    params.add(p);
+                    if (token.type().equals(TokenType.Comma))
+                        match(TokenType.Comma);
+                }
+                match(TokenType.RightParen);
+                e = new ExpressionCall(v, params);
+            }
+            else {
+                e = v;
+            }
         } else if (isLiteral()) {
             e = literal();
         } else if (token.type().equals(TokenType.LeftParen)) {
@@ -381,7 +533,8 @@ public class Parser {
         return token.type().equals(TokenType.Int)
             || token.type().equals(TokenType.Bool) 
             || token.type().equals(TokenType.Float)
-            || token.type().equals(TokenType.Char);
+            || token.type().equals(TokenType.Char)
+            || token.type().equals(TokenType.Void);
     }
     
     private boolean isLiteral( ) {
@@ -395,5 +548,4 @@ public class Parser {
         return token.type().equals(TokenType.True) ||
             token.type().equals(TokenType.False);
     }
-
 } // Parser

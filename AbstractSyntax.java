@@ -4,56 +4,267 @@
 import java.util.*;
 
 class Program {
-    // Program = Declarations decpart ; Block body
-    Declarations decpart;
-    Block body;
+    // Program = Declarations globals ; Functions functions
+    Declarations globals;
+    Functions functions;
 
-    Program (Declarations d, Block b) {
-        decpart = d;
-        body = b;
+    Program (Declarations d, Functions f) {
+        globals = d;
+        functions = f;
     }
 
 	public void display() {
         System.out.println("[ Program AST ]");
-        decpart.display(1);
-        body.display(1);
+        System.out.println("\tGlobals :");
+        globals.display(2);
+        functions.display(1);
         System.out.println("");
     }
 
-    public TypeMap typing () {
-        TypeMap tm = new TypeMap();
-
-        for (Declaration d : decpart) {
-            tm.put(d.v, d.t);
-        }
-
-        return tm;
+    public void V(TypeMap gm) {
+        globals.V();
+        System.out.println("[ Globals Type Map ]");
+        globals.display(1);
+        System.out.println("");
+        functions.V(gm);
     }
 
-    public void V(TypeMap tm) {
-        decpart.V();
-        System.out.println("[ Type Map ]");
-        tm.display();
-        body.V(tm);
-    }
-
-    public Program T(TypeMap tm) {
-        body = body.T(tm);
-        return new Program(decpart, body);
-    }
-
-    public State initialState() {
-        State state = new State();
-
-        for (Declaration d : decpart) {
-            state.put(d.v, Value.mkValue(d.t));
-        }
-
-        return state;
+    public Program T(TypeMap gm) {
+        functions = functions.T(gm);
+        return new Program(globals, functions);
     }
 
     public State M() {
-        return body.M(initialState());
+        Variable main = new Variable("main");
+        ArrayList<Value> params = new ArrayList<>();
+
+        return functions.M_S(main, Semantics.initialState(globals), params);
+    }
+}
+
+class Functions extends ArrayList<Function> {
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Functions :");
+        for (Function f : this) {
+            f.display(i + 1);
+        }
+    }
+
+    public void V(TypeMap gm) {
+        for (int i = 0; i < this.size() - 1; i++) {
+            Function fi = this.get(i);
+
+            for (int j = i + 1; j < this.size(); j++) {
+                Function fj = this.get(j);
+
+                if (fi.name.equals(fj.name)) {
+                    throw new IllegalArgumentException("duplicate function name : " + fj.name);
+                }
+            }
+        }
+
+        boolean m = false;
+        Variable v = new Variable("main");
+        for (Function f : this) {
+            if (f.name.equals(v) && f.type.equals(Type.INT)) {
+                m = true;
+            }
+        }
+
+        if (!m) {
+            throw new IllegalArgumentException("int main function not found : ");
+        }
+
+        for (Function f : this) {
+            TypeMap tm = new TypeMap();
+            tm.putAll(gm);
+
+            for (int i = 0; i < f.params.size() - 1; i++) {
+                Declaration di = f.params.get(i);
+
+                for (int j = i + 1; j < f.params.size(); j++) {
+                    Declaration dj = f.params.get(j);
+
+                    if (di.v.equals(dj.v)) {
+                        throw new IllegalArgumentException("params duplicate declaration : " + dj.v);
+                    }
+                }
+            }
+
+            for (int i = 0; i < f.locals.size() - 1; i++) {
+                Declaration di = f.locals.get(i);
+
+                for (int j = i + 1; j < f.locals.size(); j++) {
+                    Declaration dj = f.locals.get(j);
+
+                    if (di.v.equals(dj.v)) {
+                        throw new IllegalArgumentException("locals duplicate declaration : " + dj.v);
+                    }
+                }
+            }
+
+            for (Declaration di : f.params) {
+                for (Declaration dj : f.locals) {
+                    if (di.v.equals(dj.v)) {
+                        throw new IllegalArgumentException("function duplicate declaration : " + dj.v);
+                    }
+                }
+            }
+
+            f.params.V();
+            f.locals.V();
+
+            tm.putAll(TypeChecker.typing(f.params));
+            tm.putAll(TypeChecker.typing(f.locals));
+
+            if (f.type.equals(Type.VOID)) {
+                for (Statement s : f.body.members) {
+                    if (s instanceof Return) throw new IllegalArgumentException("void function cannot have a return value : " + f.name);
+                }
+            }
+            else {
+                boolean b = false;
+
+                for (Statement s : f.body.members) {
+                    if (s instanceof Return) b = true;
+                }
+
+                if (!b) throw new IllegalArgumentException("no return value : " + f.name);
+            }
+
+            System.out.println("[ Function Type Map -> " + f.name +  " ]");
+            tm.display();
+
+            f.body.V(this, tm);
+        }
+    }
+
+    public Functions T(TypeMap gm) {
+        Functions fs = new Functions();
+
+        for (Function f : this) {
+            TypeMap tm = new TypeMap();
+            tm.putAll(gm);
+            tm.putAll(TypeChecker.typing(f.params));
+            tm.putAll(TypeChecker.typing(f.locals));
+
+            Function nf = new Function(f.name, f.type, f.params, f.locals, f.body.T(this, tm));
+
+            fs.add(nf);
+        }
+
+        return fs;
+    }
+
+    public State M_S(Variable fun, State globals, ArrayList<Value> params) {
+        for (int i = 0; i < this.size(); i++) {
+            if (this.get(i).name.equals(fun)) { // find function
+                State locals = new State();
+                Function f = new Function(
+                        this.get(i).name, this.get(i).type, this.get(i).params, this.get(i).locals, this.get(i).body
+                );
+                Semantics.callStack.push(f);
+
+                for (int j = 0; j < f.params.size(); j++) {
+                    locals.put(f.params.get(j).v, params.get(j));
+                }
+                locals.putAll(Semantics.initialState(f.locals));
+
+                f.body.M(this, globals, locals);
+
+                Semantics.callStack.pop();
+                break;
+            }
+        }
+
+        return globals;
+    }
+
+    public Value M_V(Variable fun, State globals, ArrayList<Value> params) {
+        Value result = null;
+
+        for (int i = 0; i < this.size(); i++) {
+            if (this.get(i).name.equals(fun)) { // find function
+                State locals = new State();
+                Function f = new Function(
+                        this.get(i).name, this.get(i).type, this.get(i).params, this.get(i).locals, this.get(i).body
+                );
+                Semantics.callStack.push(f);
+
+                for (int j = 0; j < f.params.size(); j++) {
+                    locals.put(f.params.get(j).v, params.get(j));
+                }
+                locals.putAll(Semantics.initialState(f.locals));
+
+                f.body.M(this, globals, locals);
+
+                result = f.value;
+
+                Semantics.callStack.pop();
+                break;
+            }
+        }
+
+        return result;
+    }
+}
+
+class Function {
+    Variable name;
+    Type type;
+    Value value;
+    Declarations params, locals;
+    Block body;
+
+    Function(Variable n, Type t, Declarations p, Declarations l, Block b) {
+        name = n;
+        type = t;
+        params = p;
+        locals = l;
+        body = b;
+
+        if (type.equals(Type.INT))
+            value = new IntValue();
+        else if (type.equals(Type.FLOAT))
+            value = new FloatValue();
+        else if (type.equals(Type.CHAR))
+            value = new CharValue();
+        else if (type.equals(Type.BOOL))
+            value = new BoolValue();
+        else
+            value = new VoidValue();
+    }
+
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Function : " + name + "; Return type : " + type);
+
+        i++;
+
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("params :");
+        params.display(i + 1);
+
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("locals :");
+        locals.display(i + 1);
+
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("body :");
+        body.display(i + 1);
+
+        System.out.println("");
     }
 }
 
@@ -83,6 +294,10 @@ class Declarations extends ArrayList<Declaration> {
                 }
             }
         }
+
+        for (Declaration d : this) {
+            if (d.t.equals(Type.VOID)) throw new IllegalArgumentException("Cannot declare void variable : " + d.v);
+        }
     }
 }
 
@@ -104,12 +319,13 @@ class Declaration {
 }
 
 class Type {
-    // Type = int | bool | char | float 
+    // Type = int | bool | char | float | void
     final static Type INT = new Type("int");
     final static Type BOOL = new Type("bool");
     final static Type CHAR = new Type("char");
     final static Type FLOAT = new Type("float");
     // final static Type UNDEFINED = new Type("undef");
+    final static Type VOID = new Type("void");
     
     private String id;
 
@@ -119,7 +335,7 @@ class Type {
 }
 
 abstract class Statement {
-    // Statement = Skip | Block | Assignment | Conditional | Loop | Print
+    // Statement = Skip | Block | Assignment | Conditional | Loop | Print | StatementCall | Return
 
     abstract public void display(int i);
 
@@ -132,11 +348,11 @@ abstract class Statement {
         }
     }
 
-    abstract public void V(TypeMap tm);
+    abstract public void V(Functions fs, TypeMap tm);
 
-    abstract public Statement T(TypeMap tm);
+    abstract public Statement T(Functions fs, TypeMap tm);
 
-    abstract public State M(State s);
+    abstract public State M(Functions fs, State globals, State locals);
 }
 
 class Skip extends Statement {
@@ -144,25 +360,25 @@ class Skip extends Statement {
     public void display(int i) { return; }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         return;
     }
 
     @Override
-    public Skip T(TypeMap tm) {
+    public Skip T(Functions fs, TypeMap tm) {
         return new Skip();
     }
 
     @Override
-    public State M(State s) {
-        return s;
+    public State M(Functions fs, State globals, State locals) {
+        return locals;
     }
 }
 
 class Block extends Statement {
     // Block = Statement*
     //         (a Vector of members)
-    public ArrayList<Statement> members = new ArrayList<Statement>();
+    public ArrayList<Statement> members = new ArrayList<>();
 
     @Override
     public void display(int i) {
@@ -176,30 +392,36 @@ class Block extends Statement {
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         for (Statement s : members) {
-            s.V(tm);
+            s.V(fs, tm);
         }
     }
 
     @Override
-    public Block T(TypeMap tm) {
+    public Block T(Functions fs, TypeMap tm) {
         Block b = new Block();
 
         for (Statement s : members) {
-            b.members.add(s.T(tm));
+            b.members.add(s.T(fs, tm));
         }
 
         return b;
     }
 
     @Override
-    public State M(State s) {
-        for (Statement t : members) {
-            s = t.M(s);
+    public State M(Functions fs, State globals, State locals) {
+        State state = new State();
+
+        for (Statement s : members) {
+            if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+                return state;
+            }
+
+            state = s.M(fs, globals, locals);
         }
 
-        return s;
+        return state;
     }
 }
 
@@ -224,12 +446,12 @@ class Assignment extends Statement {
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         check(tm.containsKey(target), "assignment target error (undeclared variable) : " + target);
-        source.V(tm);
+        source.V(fs, tm);
 
         Type ttype = tm.get(target);
-        Type stype = source.typeOf(tm);
+        Type stype = source.typeOf(fs, tm);
         if (ttype != stype) {
             if (ttype == Type.FLOAT) check(stype == Type.INT, "assignment type error : " + target);
             else if (ttype == Type.INT) check(stype == Type.CHAR, "assignment type error : " + target);
@@ -238,11 +460,11 @@ class Assignment extends Statement {
     }
 
     @Override
-    public Assignment T(TypeMap tm) {
-        Expression e = source.T(tm);
+    public Assignment T(Functions fs, TypeMap tm) {
+        Expression e = source.T(fs, tm);
 
         Type ttype = tm.get(target);
-        Type stype = source.typeOf(tm);
+        Type stype = source.typeOf(fs, tm);
 
         if (ttype == Type.FLOAT) {
             if (stype == Type.INT) {
@@ -262,8 +484,15 @@ class Assignment extends Statement {
     }
 
     @Override
-    public State M(State s) {
-        return s.onion(target, source.M(s));
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
+
+        if (locals.containsKey(target))
+            return locals.onion(target, source.M(fs, globals, locals));
+        else
+            return globals.onion(target, source.M(fs, globals, locals));
     }
 }
 
@@ -307,12 +536,12 @@ class Conditional extends Statement {
     }
 
     @Override
-    public void V(TypeMap tm) {
-        test.V(tm);
+    public void V(Functions fs, TypeMap tm) {
+        test.V(fs, tm);
 
-        if (test.typeOf(tm) == Type.BOOL) {
-            thenbranch.V(tm);
-            if (elsebranch != null) elsebranch.V(tm);
+        if (test.typeOf(fs, tm) == Type.BOOL) {
+            thenbranch.V(fs, tm);
+            if (elsebranch != null) elsebranch.V(fs, tm);
         }
         else {
             check(false, "conditional type error : " + test);
@@ -320,28 +549,32 @@ class Conditional extends Statement {
     }
 
     @Override
-    public Conditional T(TypeMap tm) {
-        Expression e = test.T(tm);
-        Statement st = thenbranch.T(tm);
+    public Conditional T(Functions fs, TypeMap tm) {
+        Expression e = test.T(fs, tm);
+        Statement st = thenbranch.T(fs, tm);
         Statement se = null;
 
         if (elsebranch != null) {
-            se = elsebranch.T(tm);
+            se = elsebranch.T(fs, tm);
         }
 
         return new Conditional(e, st, se);
     }
 
     @Override
-    public State M(State s) {
-        if(test.M(s).boolValue())
-            return thenbranch.M(s);
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
+
+        if(test.M(fs, globals, locals).boolValue())
+            return thenbranch.M(fs, globals, locals);
         else
             if (elsebranch != null) {
-                return elsebranch.M(s);
+                return elsebranch.M(fs, globals, locals);
             }
             else {
-                return s;
+                return locals;
             }
     }
 }
@@ -366,27 +599,31 @@ class Loop extends Statement {
     }
 
     @Override
-    public void V(TypeMap tm) {
-        test.V(tm);
+    public void V(Functions fs, TypeMap tm) {
+        test.V(fs, tm);
 
-        if (test.typeOf(tm) == Type.BOOL) body.V(tm);
+        if (test.typeOf(fs, tm) == Type.BOOL) body.V(fs, tm);
         else check(false, "loop type error : " + test);
     }
 
     @Override
-    public Loop T(TypeMap tm) {
-        Expression e = test.T(tm);
-        Statement s = body.T(tm);
+    public Loop T(Functions fs, TypeMap tm) {
+        Expression e = test.T(fs, tm);
+        Statement s = body.T(fs, tm);
 
         return new Loop(e, s);
     }
 
     @Override
-    public State M(State s) {
-        if (test.M(s).boolValue())
-            return this.M(body.M(s));
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
+
+        if (test.M(fs, globals, locals).boolValue())
+            return this.M(fs, body.M(fs, globals, locals), locals);
         else
-            return s;
+            return locals;
     }
 }
 
@@ -408,37 +645,254 @@ class Print extends Statement {
     }
 
     @Override
-    public void V(TypeMap tm) {
-        expression.V(tm);
+    public void V(Functions fs, TypeMap tm) {
+        expression.V(fs, tm);
     }
 
     @Override
-    public Print T(TypeMap tm) {
-        Expression e = expression.T(tm);
+    public Print T(Functions fs, TypeMap tm) {
+        Expression e = expression.T(fs, tm);
 
         return new Print(e);
     }
 
     @Override
-    public State M(State s) {
-        Value v = expression.M(s);
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
 
-//        if (v.isUndef()) {
-//            System.out.print("Undefined Variable");
-//        }
-//        else {
-//            if (v.type == Type.CHAR) System.out.print((int)v.charValue());
-//            else System.out.print(v);
-//        }
+        Value v = expression.M(fs, globals, locals);
 
         System.out.print(v);
 
-        return s;
+        return locals;
+    }
+}
+
+class StatementCall extends Statement {
+    Variable name;
+    ArrayList<Expression> params;
+
+    StatementCall(Variable n, ArrayList<Expression> p) {
+        name = n;
+        params = p;
+    }
+
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("StatementCall : " + name);
+
+        for (int j = 0; j < i + 1; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Args :");
+
+        for (Expression e : params) {
+            e.display(i + 2);
+        }
+    }
+
+    @Override
+    public void V(Functions fs, TypeMap tm) {
+        boolean c = false;
+        Function function = null;
+
+        for (Function f : fs) {
+            if (f.name.equals(this.name)) {
+                c = true;
+                function = f;
+            }
+        }
+        check(c, "undefined function StatementCall : " + name);
+
+        for (Expression e : params) {
+            e.V(fs, tm);
+        }
+
+        check(function.params.size() == params.size(), "different number of parameters : " + name);
+
+        for (int i = 0; i < params.size(); i++) {
+            check(function.params.get(i).t == params.get(i).typeOf(fs, tm), "different type of parameters : " + name);
+        }
+    }
+
+    @Override
+    public StatementCall T(Functions fs, TypeMap tm) {
+        ArrayList<Expression> es = new ArrayList<>();
+
+        for (Expression e : params) {
+            es.add(e.T(fs, tm));
+        }
+
+        return new StatementCall(name, es);
+    }
+
+    @Override
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
+
+        ArrayList<Value> p = new ArrayList<>();
+
+        for (Expression e : params) {
+            p.add(e.M(fs, globals, locals));
+        }
+
+        return fs.M_S(name, globals, p);
+    }
+}
+
+class ExpressionCall extends Expression {
+    Variable name;
+    ArrayList<Expression> params;
+
+    ExpressionCall(Variable n, ArrayList<Expression> p) {
+        name = n;
+        params = p;
+    }
+
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("ExpressionCall : " + name);
+
+        for (int j = 0; j < i + 1; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Args :");
+
+        for (Expression e : params) {
+            e.display(i + 2);
+        }
+    }
+
+    @Override
+    protected Type typeOf(Functions fs, TypeMap tm) {
+        Type t = null;
+
+        for (Function f : fs) {
+            if (f.name.equals(this.name)) {
+                t = f.type;
+            }
+        }
+
+        if (t == null) check(false, "undefined function StatementCall typeOf : " + name);
+
+        return t;
+    }
+
+    @Override
+    public void V(Functions fs, TypeMap tm) {
+        boolean c = false;
+        Function function = null;
+
+        for (Function f : fs) {
+            if (f.name.equals(this.name)) {
+                c = true;
+                function = f;
+            }
+        }
+        check(c, "undefined function ExpressionCall : " + name);
+
+        for (Expression e : params) {
+            e.V(fs, tm);
+        }
+
+        check(function.params.size() == params.size(), "different number of parameters : " + name);
+
+        for (int i = 0; i < params.size(); i++) {
+            check(function.params.get(i).t == params.get(i).typeOf(fs, tm), "different type of parameters : " + name);
+        }
+    }
+
+    @Override
+    public ExpressionCall T(Functions fs, TypeMap tm) {
+        ArrayList<Expression> es = new ArrayList<>();
+
+        for (Expression e : params) {
+            es.add(e.T(fs, tm));
+        }
+
+        return new ExpressionCall(name, es);
+    }
+
+    @Override
+    public Value M(Functions fs, State globals, State locals) {
+        for (int i = 0; i < fs.size(); i++) {
+            if (fs.get(i).name.equals(name)) {
+                ArrayList<Value> p = new ArrayList<>();
+
+                for (Expression e : params) {
+                    p.add(e.M(fs, globals, locals));
+                }
+
+                return fs.M_V(name, globals, p);
+            }
+        }
+
+        throw new IllegalArgumentException("ExpressionCall M error");
+    }
+}
+
+class Return extends Statement {
+    Variable name;
+    Expression result;
+
+    Return(Variable n, Expression r) {
+        name = n;
+        result = r;
+    }
+
+    @Override
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Return :");
+        result.display(i + 1);
+    }
+
+    @Override
+    public void V(Functions fs, TypeMap tm) {
+        boolean c = false;
+        Type t = null;
+        for (Function f : fs) {
+            if (f.name.equals(this.name)) {
+                c = true;
+                t = f.type;
+            }
+        }
+        check(c, "undefined function Return : " + name);
+
+        result.V(fs, tm);
+
+        check(result.typeOf(fs, tm).equals(t), "function return type error : " + name);
+    }
+
+    @Override
+    public Return T(Functions fs, TypeMap tm) {
+        return new Return(name, result.T(fs, tm));
+    }
+
+    @Override
+    public State M(Functions fs, State globals, State locals) {
+        if (!(Semantics.callStack.get(Semantics.callStack.size() - 1).value.isUndef())) {
+            return locals;
+        }
+
+        Semantics.callStack.get(Semantics.callStack.size() - 1).value = result.M(fs, globals, locals);
+
+        return locals;
     }
 }
 
 abstract class Expression {
-    // Expression = Variable | Value | Binary | Unary
+    // Expression = Variable | Value | Binary | Unary | ExpressionCall
 
     abstract public void display(int i);
 
@@ -451,13 +905,13 @@ abstract class Expression {
         }
     }
 
-    abstract protected Type typeOf(TypeMap tm);
+    abstract protected Type typeOf(Functions fs, TypeMap tm);
 
-    abstract public void V(TypeMap tm);
+    abstract public void V(Functions fs, TypeMap tm);
 
-    abstract public Expression T(TypeMap tm);
+    abstract public Expression T(Functions fs, TypeMap tm);
 
-    abstract public Value M(State s);
+    abstract public Value M(Functions fs, State globals, State locals);
 }
 
 class Variable extends Expression {
@@ -484,25 +938,28 @@ class Variable extends Expression {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         check(tm.containsKey(this), "undefined variable : " + id);
         return tm.get(this);
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         check(tm.containsKey(this), "undeclared variable : " + id);
         return;
     }
 
     @Override
-    public Variable T(TypeMap tm) {
+    public Variable T(Functions fs, TypeMap tm) {
         return this;
     }
 
     @Override
-    public Value M(State s) {
-        return s.get(this);
+    public Value M(Functions fs, State globals, State locals) {
+        if (locals.containsKey(this))
+            return locals.get(this);
+        else
+            return globals.get(this);
     }
 }
 
@@ -571,22 +1028,22 @@ class IntValue extends Value {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         return type;
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         return;
     }
 
     @Override
-    public IntValue T(TypeMap tm) {
+    public IntValue T(Functions fs, TypeMap tm) {
         return this;
     }
 
     @Override
-    public Value M(State s) {
+    public Value M(Functions fs, State globals, State locals) {
         return this;
     }
 }
@@ -622,22 +1079,22 @@ class BoolValue extends Value {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         return type;
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         return;
     }
 
     @Override
-    public BoolValue T(TypeMap tm) {
+    public BoolValue T(Functions fs, TypeMap tm) {
         return this;
     }
 
     @Override
-    public Value M(State s) {
+    public Value M(Functions fs, State globals, State locals) {
         return this;
     }
 }
@@ -668,22 +1125,22 @@ class CharValue extends Value {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         return type;
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         return;
     }
 
     @Override
-    public CharValue T(TypeMap tm) {
+    public CharValue T(Functions fs, TypeMap tm) {
         return this;
     }
 
     @Override
-    public Value M(State s) {
+    public Value M(Functions fs, State globals, State locals) {
         return this;
     }
 }
@@ -714,22 +1171,61 @@ class FloatValue extends Value {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         return type;
     }
 
     @Override
-    public void V(TypeMap tm) {
+    public void V(Functions fs, TypeMap tm) {
         return;
     }
 
     @Override
-    public FloatValue T(TypeMap tm) {
+    public FloatValue T(Functions fs, TypeMap tm) {
         return this;
     }
 
     @Override
-    public Value M(State s) {
+    public Value M(Functions fs, State globals, State locals) {
+        return this;
+    }
+}
+
+class VoidValue extends Value {
+    VoidValue() {
+        type = Type.VOID;
+    }
+
+    @Override
+    public String toString() {
+        return "undef";
+    }
+
+    @Override
+    public void display(int i) {
+        for (int j = 0; j < i; j++) {
+            System.out.print("\t");
+        }
+        System.out.println("Void");
+    }
+
+    @Override
+    protected Type typeOf(Functions fs, TypeMap tm) {
+        return type;
+    }
+
+    @Override
+    public void V(Functions fs, TypeMap tm) {
+        return;
+    }
+
+    @Override
+    public Expression T(Functions fs, TypeMap tm) {
+        return this;
+    }
+
+    @Override
+    public Value M(Functions fs, State globals, State locals) {
         return this;
     }
 }
@@ -755,9 +1251,9 @@ class Binary extends Expression {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         if (op.ArithmeticOp()) {
-            return term1.typeOf(tm);
+            return term1.typeOf(fs, tm);
         }
         else if (op.RelationalOp() || op.BooleanOp()) {
             return Type.BOOL;
@@ -768,12 +1264,12 @@ class Binary extends Expression {
     }
 
     @Override
-    public void V(TypeMap tm) {
-        term1.V(tm);
-        term2.V(tm);
+    public void V(Functions fs, TypeMap tm) {
+        term1.V(fs, tm);
+        term2.V(fs, tm);
 
-        Type tp1 = term1.typeOf(tm);
-        Type tp2 = term2.typeOf(tm);
+        Type tp1 = term1.typeOf(fs, tm);
+        Type tp2 = term2.typeOf(fs, tm);
         if(op.ArithmeticOp()) {
             check((tp1 == tp2) && (tp1 == Type.INT || tp1 == Type.FLOAT), "binary type error : " + op);
         }
@@ -789,12 +1285,12 @@ class Binary extends Expression {
     }
 
     @Override
-    public Binary T(TypeMap tm) {
-        Type tp1 = term1.typeOf(tm);
-        Type tp2 = term2.typeOf(tm);
+    public Binary T(Functions fs, TypeMap tm) {
+        Type tp1 = term1.typeOf(fs, tm);
+        Type tp2 = term2.typeOf(fs, tm);
 
-        Expression t1 = term1.T(tm);
-        Expression t2 = term2.T(tm);
+        Expression t1 = term1.T(fs, tm);
+        Expression t2 = term2.T(fs, tm);
 
         if(op.ArithmeticOp()) {
             if (tp1 == Type.INT) {
@@ -833,8 +1329,8 @@ class Binary extends Expression {
     }
 
     @Override
-    public Value M(State s) {
-        return applyBinary(term1.M(s), term2.M(s));
+    public Value M(Functions fs, State globals, State locals) {
+        return applyBinary(term1.M(fs, globals, locals), term2.M(fs, globals, locals));
     }
 
     private Value applyBinary(Value v1, Value v2) {
@@ -944,12 +1440,12 @@ class Unary extends Expression {
     }
 
     @Override
-    protected Type typeOf(TypeMap tm) {
+    protected Type typeOf(Functions fs, TypeMap tm) {
         if (op.NotOp()) {
             return Type.BOOL;
         }
         else if (op.NegateOp()) {
-            return term.typeOf(tm);
+            return term.typeOf(fs, tm);
         }
         else if (op.intOp()) {
             return Type.INT;
@@ -966,10 +1462,10 @@ class Unary extends Expression {
     }
 
     @Override
-    public void V(TypeMap tm) {
-        term.V(tm);
+    public void V(Functions fs, TypeMap tm) {
+        term.V(fs, tm);
 
-        Type tp = term.typeOf(tm);
+        Type tp = term.typeOf(fs, tm);
         if (op.NotOp()) {
             check(tp == Type.BOOL, "unary type error : " + op);
         }
@@ -991,9 +1487,9 @@ class Unary extends Expression {
     }
 
     @Override
-    public Unary T(TypeMap tm) {
-        Type t = term.typeOf(tm);
-        Expression e = term.T(tm);
+    public Unary T(Functions fs, TypeMap tm) {
+        Type t = term.typeOf(fs, tm);
+        Expression e = term.T(fs, tm);
 
         if ((t == Type.BOOL) && (op.NotOp())) {
             return new Unary(new Operator(Operator.NOT), e);
@@ -1032,8 +1528,8 @@ class Unary extends Expression {
     }
 
     @Override
-    public Value M(State s) {
-        return applyUnary(term.M(s));
+    public Value M(Functions fs, State globals, State locals) {
+        return applyUnary(term.M(fs, globals, locals));
     }
 
     private Value applyUnary(Value v) {

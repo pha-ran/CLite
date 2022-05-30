@@ -1,3 +1,10 @@
+int x, y;
+
+int fibonacci (int n) {
+   if (n < 2) return n;
+   return fibonacci(n-1) + fibonacci(n-2);
+}
+
 int main ( ) {
     int n, i, result, j;
     float a, b, c;
@@ -50,4 +57,9 @@ int main ( ) {
     print (3+5)*9;
     print '\n';
     print true;
+
+    print '\n';
+    print fibonacci(5);
+
+    return 0;
 }
